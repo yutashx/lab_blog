@@ -51,26 +51,50 @@ const markdown = (file:string):string =>{
     return html;
 }
 
+const showDir = async (path:string):Promise<string|undefined> => {
+    try{
+        const items:string[] = [];
+        for await (const dirEntry of Deno.readDir(path)) {
+            const itempath:string = `${path}/${dirEntry["name"]}`;
+            const item:string = `<ul><a href=${itempath}>${dirEntry["name"]}${dirEntry["isFile"]? "": "/"}</a></ul>`;
+            items.push(item);
+        }
+        const html:string = htmlnize(items.join('\n'), {title: path});
+
+        return html;
+    }catch(e){
+        console.log(`error: ${e}`);
+    }
+}
+
+
 
 for await (const req of s) {
     const filepath:string = `${req.url.slice(1)}`; //remove root of path
+    const schema:string[] = filepath.split("/");
     const dots:string[] = filepath.split(".");
     const ext:string = dots[dots.length - 1];
 
     if (["", "/", "index", "index.html", "index.md"].includes(filepath)){
-        const file = decoder.decode(await Deno.readFile("index.md"));
-        req.respond({ body: markdown(file) });
+        showDir("contents")
+        .then((html) => req.respond({ body: html }))
+        .catch((e) => console.log(`error: ${e}`));
         continue;
     }
-    
+
     try{
-        const file = decoder.decode(await Deno.readFile(filepath));
         switch(ext){
             case "md":
-                req.respond({ body: markdown(file) });
+                req.respond({ body: markdown(decoder.decode(await Deno.readFile(`${filepath}`))) });
                 break;
+            case "css":
+                req.respond({ body: decoder.decode(await Deno.readFile(`css/${schema[schema.length-1]}`)) });
+                break;
+            case "jpg":
+            case "png":
+                req.respond({ body: decoder.decode(await Deno.readFile(`images/${schema[schema.length-1]}`)) });
             default:
-                req.respond({ body: file });
+                showDir(filepath).then((html) => req.respond({ body: html }));
                 break;
         }
     }catch(e){
